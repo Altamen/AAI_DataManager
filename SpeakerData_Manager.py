@@ -24,6 +24,7 @@ class SpeakerData_Manager():
         self.dataset_path = dataset_path
         self.speaker_name = speaker_name
         self.dataset_name = os.path.basename(os.path.normpath(dataset_path))
+        self.with_annotation = with_annotation
 
         print("---------")
         print(f"Building Data_Manager for speaker '{self.speaker_name}' in '{self.dataset_name}'")
