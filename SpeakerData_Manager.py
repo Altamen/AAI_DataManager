@@ -355,7 +355,9 @@ class SpeakerData_Manager():
     """
     Load preped data
     """
-    def load_data_list_from_dir_under_prep_data(self, dir_name, index_list=None):
+    def load_data_list_from_dir_under_prep_data(
+            self, dir_name, index_list=None, with_speaker_name=False
+        ):
         """
         Load all data accessible by index_list from a directory under "prep_data".
         If index_list is None, return all data accessible by self.all_index_list
@@ -369,6 +371,7 @@ class SpeakerData_Manager():
         -------
         all_data_list : list
             The elements of this list are all tuples: (index, data).
+            若为 with_speaker_name, 则列表中的元素应为 ((speaker_name, index), data)
         """
         if not index_list:
             index_list = self.all_index_list
@@ -380,11 +383,14 @@ class SpeakerData_Manager():
         for index in tqdm(index_list):
             current_file_path = os.path.join(dir_path, index + ".npy")
             current_data = np.load(current_file_path)
-            data_list.append((index, current_data))
+            if with_speaker_name:
+                data_list.append(((self.speaker_name, index), current_data))
+            else:
+                data_list.append((index, current_data))
         return data_list
     
     def load_EMA_sensors_from_dir_under_prep_data(
-            self, dir_name, sensors_list=[], TVs_list=[], index_list=None
+            self, dir_name, sensors_list=[], TVs_list=[], index_list=None, with_speaker_name=False
         ):
         if (sensors_list == []) and (TVs_list == []):
             raise ValueError("sensors_list and TVs_list cannot be both empty.")
@@ -410,7 +416,10 @@ class SpeakerData_Manager():
         for index in tqdm(index_list):
             current_file_path = os.path.join(dir_path, index + ".npy")
             current_data = np.load(current_file_path)[:, required_indices]
-            data_list.append((index, current_data))
+            if with_speaker_name:
+                data_list.append(((self.speaker_name, index), current_data))
+            else:
+                data_list.append((index, current_data))
         return data_list
     
 
