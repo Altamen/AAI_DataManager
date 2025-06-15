@@ -39,7 +39,8 @@ class Dataset_Manager():
             train_ratio,
             val_ratio,
             test_speaker_num,
-            save_dir=None
+            save_dir=None,
+            if_return_list=True
         ):
 
         if (train_ratio + val_ratio) != 1.0:
@@ -63,6 +64,7 @@ class Dataset_Manager():
             all_train_list += current_train_list
             all_val_list += current_val_list
         
+        # 保存所生成的 train_list 和 val_list, 以及 test_speakers
         train_list_save_path = os.path.join(save_dir, "train_list.txt")
         val_list_save_path = os.path.join(save_dir, "val_list.txt")
         test_speakers_save_path = os.path.join(save_dir, "test_speaker.json")
@@ -71,6 +73,13 @@ class Dataset_Manager():
         self._save_list_to_txt(all_val_list, val_list_save_path)
         with open(test_speakers_save_path, "w") as f:
             json.dump(test_speakers, f)
+        
+        self.all_train_list = all_train_list
+        self.all_val_list = all_val_list
+
+        if if_return_list:
+            return self.all_train_list, self.all_val_list
+
     
     def convert_txt_to_speaker_indices_dict(self, txt_path):
         """
