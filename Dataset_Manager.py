@@ -91,6 +91,13 @@ class Dataset_Manager():
         for speaker_name, idx in all_index_list:
             speaker_indices_dict[speaker_name].append(idx)
         return speaker_indices_dict
+    
+    def convert_list_to_speaker_indices_dict(self, the_list):
+        speaker_indices_dict = defaultdict(list)
+
+        for speaker_name, idx in the_list:
+            speaker_indices_dict[speaker_name].append(idx)
+        return speaker_indices_dict
 
     def _save_list_to_txt(self, the_list, save_path):
         with open(save_path, "w", encoding="utf-8") as f:
