@@ -7,8 +7,8 @@ from tqdm import tqdm
 import librosa
 import soundfile as sf
 
-from RawEMA_Reader import *
-from Annotation_Reader import *
+from AAI_DataManager.RawEMA_Reader import *
+from AAI_DataManager.Annotation_Reader import *
 
 
 class SpeakerData_Manager():
@@ -17,14 +17,27 @@ class SpeakerData_Manager():
         dataset 目录下是各个 speaker 的目录, 目录名就是 speaker_name
         每一个 speaker 目录下, 有 raw_data 和 prep_data 这两个目录
     """
-    def __init__(self, dataset_path, speaker_name, with_annotation=True):
-        # 若 with_annotation 为 false, 不会加载 annotation reader
-        # 同时, 如果调用【涉及到标注的函数】, 也会报错
+    def __init__(
+            self,
+            dataset_path, speaker_name,
+            with_annotation=True,
+            with_raw=True, all_index_list_from_dir="df_preped_EMA"
+        ):
+        """
+        若 with_annotation 为 false, 则不会加载 annotation reader
+            - 同时, 如果调用【涉及到标注的函数】, 也会报错
+        若 with_raw 为 false, 则不会加载 raw EMA reader
+            - 同时, 如果调用【涉及到 raw data 的函数】, 也会报错
+            - 此时, 默认的 index_list 将从 all_index_list_from_dir 文件夹获取
+        """
 
         self.dataset_path = dataset_path
         self.speaker_name = speaker_name
         self.dataset_name = os.path.basename(os.path.normpath(dataset_path))
+
         self.with_annotation = with_annotation
+        self.with_raw = with_raw
+        self.all_index_list_from_dir = all_index_list_from_dir
 
         print("---------")
         print(f"Building Data_Manager for speaker '{self.speaker_name}' in '{self.dataset_name}'")
@@ -32,20 +45,26 @@ class SpeakerData_Manager():
         """
         从 Dataset_Info.json 中载入该数据集的信息
         """
-        Dataset_Info_path = r"Dataset_Info.json"
+        # 载入当前 dataset 的 info
+        Dataset_Info_path = os.path.join("AAI_DataManager", "Dataset_Info.json")
         with open(Dataset_Info_path, "r") as f:
             Dataset_Info = json.load(f)
         self.Current_Dataset_Info = Dataset_Info["Dataset_Info_List"]\
             [Dataset_Info["Dataset_Name_List"].index(self.dataset_name)]
         
+        # 获得 speaker list
         self.speaker_list = self.Current_Dataset_Info["Speaker_List"]
         if self.speaker_name not in self.speaker_list:
             raise ValueError(f"speaker name {self.speaker_name} is not in the name list!")
         
-        # get information about Sample Rate (sr)
+        # 获得采样率 (sampling rate, sr) 相关信息
         self.raw_EMA_sr = self.Current_Dataset_Info["raw_EMA_sr"]
         self.wav_sr = self.Current_Dataset_Info["wav_sr"]
+
+        # 是否有鼻部坐标
         self.with_nose = self.Current_Dataset_Info["with_nose"]
+
+        # 标注信息
         if self.with_annotation:
             self.with_annotation = self.Current_Dataset_Info["with_annotation"]
         self.silence_token = self.Current_Dataset_Info["silence_token"]
@@ -57,17 +76,23 @@ class SpeakerData_Manager():
         # get the absolute path of directories containing raw data
         self.raw_EMA_dir_path = self._get_path_from_Dataset_Info("raw_EMA_dir_path")
         self.wav_dir_path = self._get_path_from_Dataset_Info("wav_dir_path")
-        self.Annotation_dir_path = self._get_path_from_Dataset_Info("Annotation_dir_path")
+        if self.with_annotation:
+            self.Annotation_dir_path = self._get_path_from_Dataset_Info("Annotation_dir_path")
 
         # choose the corresponding RawEMA_Reader for the dataset
-        RawEMA_Reader_name = self.dataset_name + "_RawEMA_Reader"
-        if RawEMA_Reader_name in globals():
-            self.RawEMA_Reader = globals()[RawEMA_Reader_name]\
-                (self.raw_EMA_dir_path, self.speaker_name)
-            self.all_index_list = self.RawEMA_Reader.EMA_index_list
-            print("RawEMA_Reader loaded")
+        if self.with_annotation:
+            RawEMA_Reader_name = self.dataset_name + "_RawEMA_Reader"
+            if RawEMA_Reader_name in globals():
+                self.RawEMA_Reader = globals()[RawEMA_Reader_name]\
+                    (self.raw_EMA_dir_path, self.speaker_name)
+                self.all_index_list = self.RawEMA_Reader.EMA_index_list
+                print("RawEMA_Reader loaded")
+            else:
+                raise ValueError(f"{RawEMA_Reader_name} not found")
         else:
-            raise ValueError(f"{RawEMA_Reader_name} not found")
+            self.RawEMA_Reader = None
+            all_data_name_list = os.listdir(self.all_index_list_from_dir)
+            self.all_index_list = [os.path.splitext(x) for x in all_data_name_list]
         
         # choose the corresponding annotation reader
         if self.with_annotation:
@@ -115,15 +140,31 @@ class SpeakerData_Manager():
         return absolute_path
     
     """
-    Get raw data info
+    For loading RAW data
 
-    raw data contains:
+    RAW data contains:
         - raw EMA
         - wav
         - annotation information
     """
     # for EMA
     def RAW_get_std_EMA_by_index(self, index):
+        """
+        Get one std_EMA (num_frames, 12) by its index.
+        This function can only be used when with_raw == True.
+
+        Parameters
+        ----------
+        index : str
+            index of the data, which is its filename without the extension part
+
+        Returns
+        -------
+        std_EMA : numpy.ndarray
+            shape (num_frames, 12)
+        """
+        if not self.with_raw:
+            raise ValueError("currently in WITHOUT RAW mode")
         std_EMA = self.RawEMA_Reader.get_std_EMA_by_index(index)
         return std_EMA
 
@@ -131,6 +172,7 @@ class SpeakerData_Manager():
         """
         Get the list containing std_EMA accessible by index_list.
         If index_list is None, load all std EMA.
+        This function can only be used when with_raw == True.
 
         Parameters
         ----------
@@ -143,6 +185,8 @@ class SpeakerData_Manager():
             Its elements are all tuples: (index, std_EMA).
             Shape of "std_EMA": (num_frames, 12).
         """
+        if not self.with_raw:
+            raise ValueError("currently in WITHOUT RAW mode")
         std_EMA_list = self.RawEMA_Reader.\
             get_std_EMA_list_by_index_list(index_list=index_list)
         return std_EMA_list
@@ -151,6 +195,12 @@ class SpeakerData_Manager():
         """
         Returns a list containing all nose_EMA accessible by self.all_index_list.
         If the dataset has no nose_EMA (determined by self.with_nose), returns None.
+        This function can only be used when with_raw == True.
+
+        Parameters
+        ----------
+        index_list : list
+            List containing indices.
 
         Returns
         -------
@@ -158,6 +208,8 @@ class SpeakerData_Manager():
             The elements of this list are all tuples: (index, nose_EMA).
             Shape of "nose_EMA": (num_frames, 2).
         """
+        if not self.with_raw:
+            raise ValueError("currently in WITHOUT RAW mode")
         if self.with_nose:
             nose_EMA_list = self.RawEMA_Reader.\
                 get_nose_EMA_list_by_index_list(index_list=index_list)
@@ -167,11 +219,21 @@ class SpeakerData_Manager():
     
     # for wav
     def RAW_get_wav_by_index(self, index):
+        """
+        This function can only be used when with_raw == True.
+        """
+        if not self.with_raw:
+            raise ValueError("currently in WITHOUT RAW mode")
         wav_path = os.path.join(self.wav_dir_path, index + ".wav")
         wav, _ = librosa.load(wav_path, sr=self.wav_sr)
         return wav
     
     def RAW_get_wav_list_by_index_list(self, index_list=None):
+        """
+        This function can only be used when with_raw == True.
+        """
+        if not self.with_raw:
+            raise ValueError("currently in WITHOUT RAW mode")
         wav_list = []
         if not index_list:
             index_list = self.all_index_list
@@ -196,61 +258,42 @@ class SpeakerData_Manager():
             frame_length=512,
             hop_length=128
         ):
+        """
+        This function can only be used when with_raw == True.
+        """
+        if not self.with_raw:
+            raise ValueError("currently in WITHOUT RAW mode")
         wav = self.RAW_get_wav_by_index(index)
-
         wav_trimmed, frame_indices = librosa.effects.trim(
             wav,
             top_db=top_db,
             frame_length=frame_length,
             hop_length=hop_length
         )
-
         start_time = frame_indices[0] / self.wav_sr
         end_time = frame_indices[1] / self.wav_sr
-
         return [start_time, end_time]
     
-    def _remove_silence(self, EMA, SF, sr, index):
+    def RAW_get_sr_xtrm_list_from_wav_for_index_list(
+            self, sr, index_list=None
+        ):
         """
-        Removing the preceding and trailing silence from EMA and SF.
-        EMA should be downsampled with SF beforehand,
-        Resulting in EMA and SF having the same sampling rate and length.
-        If with annotations, extract xtrm_list from annotations.
-        If not, extract xtrm_list from wav.
-
-        Parameters
-        ----------
-        EMA : numpy.ndarray
-            Shape: (num_frames, channels).
-        SF : numpy.ndarray
-            Shape: (num_frames, dimensions).
-        sr : int
-            Sampling rate of EMA and SF.
-        index : str
-            Index of EMA and SF.
-            Needed for extracting wav or annotation.
-        
-        Returns
-        -------
-        trimmed_EMA : numpy.ndarray
-            Shape: (num_frames, channels).
-        trimmed_SF : numpy.ndarray
-            Shape: (num_frames, dimensions).
+        This function can only be used when with_raw == True.
         """
-        if self.with_annotation:
-            xtrm_list = self.RAW_get_xtrm_list_from_Annotations_by_index(index)
-        else:
+        if not self.with_raw:
+            raise ValueError("currently in WITHOUT RAW mode")
+        if index_list is None:
+            index_list = self.RawEMA_Reader.EMA_index_list
+        print(f"getting xtrm list for sampling rate {sr}")
+        all_xtrm_list = []
+        for index in tqdm(index_list):
             xtrm_list = self.RAW_get_xtrm_list_from_wav_by_index(index)
-        
-        xtrm_frames = [
-            int(xtrm_list[0] * sr),
-            min(int(np.ceil(xtrm_list[1] * sr)), len(EMA))
-        ]
-
-        trimmed_EMA = EMA[xtrm_frames[0], xtrm_frames[1]]
-        trimmed_SF = SF[xtrm_frames[0], xtrm_frames[1]]
-
-        return trimmed_EMA, trimmed_SF
+            xtrm_frames = [
+                int(xtrm_list[0] * sr),
+                int(np.ceil(xtrm_list[1] * sr))
+            ]
+            all_xtrm_list.append((index, xtrm_frames))
+        return all_xtrm_list
     
 
     """
@@ -333,12 +376,12 @@ class SpeakerData_Manager():
         Parameters
         ----------
         data_list : list
-                   Its elements: (index, data).
-                   "index" is needed to name the resulting file.
+            Its elements: (index, data).
+            "index" is needed to name the resulting file.
         dir_name : str
-                   The name of the directory under which the data are to be saved.
-                   The directory should be under "dataset_path/speaker_name/prep_data/".
-                   The directory should already exists (this function will check it).
+            The name of the directory under which the data are to be saved.
+            The directory should be under "dataset_path/speaker_name/prep_data/".
+            The directory should already exists (this function will check it).
         """
         dir_path = os.path.join(self.prep_data_dir_path, dir_name)
         if not os.path.exists(dir_path):
@@ -390,7 +433,8 @@ class SpeakerData_Manager():
         return data_list
     
     def load_EMA_sensors_from_dir_under_prep_data(
-            self, dir_name, sensors_list=[], TVs_list=[], index_list=None, with_speaker_name=False
+            self, dir_name, sensors_list=[], TVs_list=[],
+            index_list=None, with_speaker_name=False
         ):
         if (sensors_list == []) and (TVs_list == []):
             raise ValueError("sensors_list and TVs_list cannot be both empty.")
@@ -425,7 +469,7 @@ class SpeakerData_Manager():
 
     """
     remove silence with phone sequence
-    and z-score normalise (optional)
+    and z-score normalise
     """
     def last_process(
             self,
@@ -483,6 +527,41 @@ class SpeakerData_Manager():
             return new_data_list, new_PS_list, stats_list
         else:
             return new_data_list, new_PS_list
+
+    def normalise_data_list(
+            self,
+            data_list,
+            new_std=2,
+            more_stats=False
+        ):
+        new_data_list = []
+        stats_list = []
+
+        print("performing normalisation")
+        for index, data in data_list:
+            normalised_data, mean, std = normalise_np(
+                data, new_std=new_std
+            )
+            stats_list.append((index, mean, std))
+            new_data_list.append((index, normalised_data))
+        
+        if more_stats:
+            return new_data_list, stats_list
+        else:
+            return new_data_list
+    
+    def remove_silence_for_datalist_with_xtrm_list(
+            self, data_list, xtrm_list
+        ):
+        trimmed_data_list = []
+        print("trimming data...")
+        for (data_index, data), (xtrm_index, xtrm_frames) in tqdm(zip(data_list, xtrm_list)):
+            if data_index == xtrm_index:
+                trimmed_data = data[xtrm_frames[0] : xtrm_frames[1]]
+                trimmed_data_list.append((data_index, trimmed_data))
+            else:
+                raise ValueError(f"data_index {data_index} 与 xtrm_index {xtrm_index} 不一致!")
+        return trimmed_data_list
 
     """
     split data

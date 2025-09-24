@@ -3,7 +3,7 @@ import json
 import random
 from collections import defaultdict
 
-from SpeakerData_Manager import SpeakerData_Manager
+from AAI_DataManager.SpeakerData_Manager import SpeakerData_Manager
 
 
 class Dataset_Manager():
@@ -14,7 +14,7 @@ class Dataset_Manager():
         """
         load dataset information
         """
-        Dataset_Info_path = r"AAI_Dataset_Info.json"
+        Dataset_Info_path = os.path.join("AAI_DataManager", "Dataset_Info.json")
         with open(Dataset_Info_path, "r") as f:
             Dataset_Info = json.load(f)
         self.Current_Dataset_Info = Dataset_Info["Dataset_Info_List"]\
