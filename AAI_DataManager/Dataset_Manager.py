@@ -7,9 +7,17 @@ from AAI_DataManager.SpeakerData_Manager import SpeakerData_Manager
 
 
 class Dataset_Manager():
-    def __init__(self, dataset_path):
+    def __init__(
+            self, dataset_path,
+            with_annotation=True,
+            with_raw=True, all_index_list_from_dir="df_preped_EMA"
+        ):
         self.dataset_path = dataset_path
         self.dataset_name = os.path.basename(os.path.normpath(dataset_path))
+
+        self.with_annotation = with_annotation
+        self.with_raw = with_raw
+        self.all_index_list_from_dir = all_index_list_from_dir
 
         """
         load dataset information
@@ -29,7 +37,9 @@ class Dataset_Manager():
         self.SpeakerData_Manager_list = []
         for speaker_name in self.speaker_list:
             My_SpeakerData_Manager = SpeakerData_Manager(
-                self.dataset_path, speaker_name
+                self.dataset_path, speaker_name,
+                with_annotation=self.with_annotation,
+                with_raw=self.with_raw, all_index_list_from_dir=self.all_index_list_from_dir
             )
             self.SpeakerData_Manager_list.append(My_SpeakerData_Manager)
         print("各 SpeakerData Manager 加载完成")

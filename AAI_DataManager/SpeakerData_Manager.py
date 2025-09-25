@@ -91,7 +91,7 @@ class SpeakerData_Manager():
                 raise ValueError(f"{RawEMA_Reader_name} not found")
         else:
             self.RawEMA_Reader = None
-            all_data_name_list = os.listdir(self.all_index_list_from_dir)
+            all_data_name_list = os.listdir(os.path.join(self.prep_data_dir_path, self.all_index_list_from_dir))
             self.all_index_list = [os.path.splitext(x) for x in all_data_name_list]
         
         # choose the corresponding annotation reader
